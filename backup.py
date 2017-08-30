@@ -13,6 +13,7 @@ RATE_LIMIT = 4  # seconds
 
 
 def main():
+    """Main logic method"""
     cur_path = os.path.dirname(os.path.abspath(__file__))
     os.chdir(cur_path)
 
@@ -23,7 +24,7 @@ def main():
     api_key = parse_api_key()
     url = f'https://api.tumblr.com/v2/blog/{blog}.tumblr.com/posts/?api_key={api_key}'
 
-    mkdir_output(blog)
+    mkdir_output()
     db = Database(blog)
 
     while True:
@@ -37,6 +38,11 @@ def main():
 
 
 def parse_args():
+    """Parse CLI args
+
+    :returns: args (object)
+
+    """
     parser = argparse.ArgumentParser(
                         description='Backup tumblr blog')
     parser.add_argument('blog',
@@ -50,6 +56,11 @@ def parse_args():
 
 
 def parse_api_key():
+    """Parse API key from CONFIG file
+
+    :returns: API key (string)
+
+    """
     try:
         with open(CONFIG) as file:
             api_key = file.readline().strip()
@@ -59,10 +70,15 @@ def parse_api_key():
 
 
 def get_json(url):
-    """Retrieve JSON"""
+    """GET JSON from Tumblr
+
+    :param url: Tumblr API url with appropriate offset param
+    :returns: JSON response (dict)
+
+    """
     resp = requests.get(url, timeout=10)
     if resp.status_code == 404:
-        raise SystemExit('\n[!]Blog is 404\n')
+        raise SystemExit('\n[!] Blog is 404\n')
 
     try:
         return resp.json()['response']
@@ -71,7 +87,13 @@ def get_json(url):
 
 
 def remaining_json(js, db):
-    """Parse JSON"""
+    """Parse JSON
+
+    :param js: JSON response (dict)
+    :param db: Databse object
+    :returns: True if there are more posts to fetch, else close out DB
+
+    """
     post_count = len(js['posts'])
 
     for post in range(post_count):
@@ -149,20 +171,26 @@ def remaining_json(js, db):
         db.commit()
 
 
-def mkdir_output(blog):
+def mkdir_output():
+    """Make local output folder"""
     try:
+        print(f'\n[+] Creating output folder')
         os.mkdir(f'output')
-        print(f'\n[+] Creating output folder at {cur_path}')
     except FileExistsError:
         pass
     except PermissionError as e:
-        raise SystemExit(f'[!] Can\'t create directory "output" at {cur_path}')
+        raise SystemExit(f'[!] Can\'t create directory "output"')
     os.chdir(f'output')
 
 
 class Database:
 
     def __init__(self, blog):
+        """Initialize local database while checking for an existing one
+
+        :param blog: Tumblr blog name
+
+        """
         db = f'{blog}.db'
         if os.path.isfile(db):
             print(f'\n[~] Found existing DB "{db}"')
@@ -174,6 +202,7 @@ class Database:
         self.create_tables()
 
     def create_tables(self):
+        """Create DB tables"""
         self.cur.execute("""CREATE TABLE IF NOT EXISTS photo(post_id INT,
                                                              date TEXT,
                                                              notes INT,
