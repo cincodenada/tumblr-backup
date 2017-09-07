@@ -9,26 +9,24 @@ import requests
 CONFIG = '../config.txt'
 
 # Be nice to tumblr servers
-RATE_LIMIT = 4  # seconds
+RATE_LIMIT = 3  # seconds
 
 
 def main():
     """Main logic method"""
-    cur_path = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(cur_path)
-
     args = parse_args()
     blog = args.blog
     offset = args.offset
 
     api_key = parse_api_key()
-    url = f'https://api.tumblr.com/v2/blog/{blog}.tumblr.com/posts/?api_key={api_key}'
+    url = (f'https://api.tumblr.com/v2/blog/{blog}.tumblr.com/posts/'
+           f'?api_key={api_key}')
 
     mkdir_output()
     db = Database(blog)
 
     while True:
-        js = get_json(f'{url}&offset={offset}&limit=20')
+        js = get_json(f'{url}&offset={offset}')
         if not remaining_json(js, db):
             return print('\nFinished\n')
         else:
@@ -61,12 +59,14 @@ def parse_api_key():
     :returns: API key (string)
 
     """
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
     try:
         with open(CONFIG) as file:
             api_key = file.readline().strip()
             return api_key
     except FileNotFoundError:
-        raise SystemExit(f'\n[!] Config file missing "{CONFIG}"\n')
+        raise SystemExit(f'\n[!] CONFIG file "{CONFIG}" missing\n')
 
 
 def get_json(url):
@@ -104,66 +104,58 @@ def remaining_json(js, db):
         tags = ','.join(js['posts'][post]['tags'])
 
         if 'photo' in post_type:
-            caption = js['posts'][post]['caption']
+            data_2 = js['posts'][post]['caption']
             photo_count = len(js['posts'][post]['photos'])
 
-            if photo_count > 1:
-                # photoset
+            if photo_count > 1:  # photoset
                 photos = []
                 for photo in range(photo_count):
                     img = js['posts'][post]['photos'][photo]['original_size']['url']
                     photos.append(img)
-                photoset = ','.join(photos)  # convert list to string for db
-                db.write('photoset', post_id, date, notes, tags, photoset, caption)
-            else:
-                # photo
-                img = js['posts'][post]['photos'][0]['original_size']['url']
-                db.write(post_type, post_id, date, notes, tags, img, caption)
+                data_1 = ','.join(photos)  # convert to string for db
+                post_type = 'photoset'  # manual correction
+            else:  # photo
+                data_1 = js['posts'][post]['photos'][0]['original_size']['url']
 
         elif 'video' in post_type:
-            caption = js['posts'][post]['caption']
+            data_2 = js['posts'][post]['caption']
             video_type = js['posts'][post]['video_type']
 
             if 'instagram' in video_type:
-                video_url = js['posts'][post]['permalink_url']
+                data_1 = js['posts'][post]['permalink_url']
             elif 'tumblr' in video_type:
-                video_url = js['posts'][post]['video_url']
+                data_1 = js['posts'][post]['video_url']
             elif 'youtube' in video_type:
                 video_id = js['posts'][post]['video']['youtube']['video_id']
-                video_url = f'https://www.youtube.com/watch?v={video_id}'
+                data_1 = f'https://www.youtube.com/watch?v={video_id}'
             else:
-                video_url = None
-            db.write(post_type, post_id, date, notes, tags, video_url, caption)
+                data_1 = None
 
         elif 'answer' in post_type:
-            question = js['posts'][post]['question']
-            answer = js['posts'][post]['answer']
-            db.write(post_type, post_id, date, notes, tags, question, answer)
+            data_1 = js['posts'][post]['question']
+            data_2 = js['posts'][post]['answer']
 
         elif 'text' in post_type:
-            title = js['posts'][post]['title']
-            body = js['posts'][post]['body']
-            db.write(post_type, post_id, date, notes, tags, title, body)
+            data_1 = js['posts'][post]['title']
+            data_2 = js['posts'][post]['body']
 
         elif 'quote' in post_type:
-            quote = js['posts'][post]['text']
-            source = js['posts'][post]['source']
-            db.write(post_type, post_id, date, notes, tags, quote, source)
+            data_1 = js['posts'][post]['text']
+            data_2 = js['posts'][post]['source']
 
         elif 'link' in post_type:
-            title = js['posts'][post]['title']
-            url = js['posts'][post]['url']
-            db.write(post_type, post_id, date, notes, tags, title, url)
+            data_1 = js['posts'][post]['title']
+            data_2 = js['posts'][post]['url']
 
         elif 'audio' in post_type:
-            caption = js['posts'][post]['caption']
-            url = js['posts'][post]['source_url']
-            db.write(post_type, post_id, date, notes, tags, url, caption)
+            data_1 = js['posts'][post]['source_url']
+            data_2 = js['posts'][post]['caption']
 
         elif 'chat' in post_type:
-            title = js['posts'][post]['title']
-            body = js['posts'][post]['body']
-            db.write(post_type, post_id, date, notes, tags, title, body)
+            data_1 = js['posts'][post]['title']
+            data_2 = js['posts'][post]['body']
+
+        db.write(post_type, post_id, date, notes, tags, data_1, data_2)
 
     if post_count or post_count >= 20:
         return True
@@ -174,13 +166,13 @@ def remaining_json(js, db):
 def mkdir_output():
     """Make local output folder"""
     try:
+        os.mkdir('output')
         print(f'\n[+] Creating output folder')
-        os.mkdir(f'output')
     except FileExistsError:
         pass
-    except PermissionError as e:
-        raise SystemExit(f'[!] Can\'t create directory "output"')
-    os.chdir(f'output')
+    except PermissionError:
+        raise SystemExit(f'\n[!] Can\'t create directory "output"\n')
+    os.chdir('output')
 
 
 class Database:
@@ -192,75 +184,96 @@ class Database:
 
         """
         db = f'{blog}.db'
-        if os.path.isfile(db):
-            print(f'\n[~] Found existing DB "{db}"')
-            print(f'[~] Making backup "{db}.bak"\n')
-            os.rename(db, f'{db}.bak')
+        self.check_backup(db)
 
-        self.conn = sqlite3.connect(db)
+        try:
+            self.conn = sqlite3.connect(db)
+            print(f'[+] Creating new DB "{db}"\n')
+        except sqlite3.OperationalError:
+            raise SystemExit(f'\n[!] Can\'t create DB {db}\n')
+
         self.cur = self.conn.cursor()
         self.create_tables()
 
+    def check_backup(self, db):
+        """Create backup of DB if DB already exists"""
+        if os.path.isfile(db):
+            try:
+                os.rename(db, f'{db}.bak')
+                print(f'\n[+] Backing up old DB "{db}.bak"')
+            except OSError:
+                print('\n[!] Can\'t create backup\n')
+
     def create_tables(self):
         """Create DB tables"""
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS photo(post_id INT,
-                                                             date TEXT,
-                                                             notes INT,
-                                                             tags TEXT,
-                                                             img TEXT,
-                                                             caption TEXT)""")
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS photoset(post_id INT,
-                                                                date TEXT,
-                                                                notes INT,
-                                                                tags TEXT,
-                                                                photoset TEXT,
-                                                                caption TEXT)""")
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS text(post_id INT,
-                                                            date TEXT,
-                                                            notes INT,
-                                                            tags TEXT,
-                                                            title TEXT,
-                                                            body TEXT)""")
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS answer(post_id INT,
-                                                              date TEXT,
-                                                              notes INT,
-                                                              tags TEXT,
-                                                              question TEXT,
-                                                              answer TEXT)""")
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS video(post_id INT,
-                                                             date TEXT,
-                                                             notes INT,
-                                                             tags TEXT,
-                                                             video_url TEXT,
-                                                             caption TEXT)""")
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS quote(post_id INT,
-                                                             date TEXT,
-                                                             notes INT,
-                                                             tags TEXT,
-                                                             quote TEXT,
-                                                             source TEXT)""")
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS link(post_id INT,
-                                                             date TEXT,
-                                                             notes INT,
-                                                             tags TEXT,
-                                                             title TEXT,
-                                                             url TEXT)""")
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS audio(post_id INT,
-                                                             date TEXT,
-                                                             notes INT,
-                                                             tags TEXT,
-                                                             url TEXT,
-                                                             caption TEXT)""")
-        self.cur.execute("""CREATE TABLE IF NOT EXISTS chat(post_id INT,
-                                                             date TEXT,
-                                                             notes INT,
-                                                             tags TEXT,
-                                                             title TEXT,
-                                                             body TEXT)""")
+        self.cur.execute("""CREATE TABLE photo(post_id INT,
+                                               date TEXT,
+                                               notes INT,
+                                               tags TEXT,
+                                               img TEXT,
+                                               caption TEXT)""")
 
-    def write(self, post_type, post_id, date, notes, tags, *args):
-        """Each post type will have 2 additional values for the db (as *args)
+        self.cur.execute("""CREATE TABLE photoset(post_id INT,
+                                                  date TEXT,
+                                                  notes INT,
+                                                  tags TEXT,
+                                                  photoset TEXT,
+                                                  caption TEXT)""")
 
+        self.cur.execute("""CREATE TABLE text(post_id INT,
+                                              date TEXT,
+                                              notes INT,
+                                              tags TEXT,
+                                              title TEXT,
+                                              body TEXT)""")
+
+        self.cur.execute("""CREATE TABLE answer(post_id INT,
+                                                date TEXT,
+                                                notes INT,
+                                                tags TEXT,
+                                                question TEXT,
+                                                answer TEXT)""")
+
+        self.cur.execute("""CREATE TABLE video(post_id INT,
+                                               date TEXT,
+                                               notes INT,
+                                               tags TEXT,
+                                               video_url TEXT,
+                                               caption TEXT)""")
+
+        self.cur.execute("""CREATE TABLE quote(post_id INT,
+                                               date TEXT,
+                                               notes INT,
+                                               tags TEXT,
+                                               quote TEXT,
+                                               source TEXT)""")
+
+        self.cur.execute("""CREATE TABLE link(post_id INT,
+                                              date TEXT,
+                                              notes INT,
+                                              tags TEXT,
+                                              title TEXT,
+                                              url TEXT)""")
+
+        self.cur.execute("""CREATE TABLE audio(post_id INT,
+                                               date TEXT,
+                                               notes INT,
+                                               tags TEXT,
+                                               url TEXT,
+                                               caption TEXT)""")
+
+        self.cur.execute("""CREATE TABLE chat(post_id INT,
+                                              date TEXT,
+                                              notes INT,
+                                              tags TEXT,
+                                              title TEXT,
+                                              body TEXT)""")
+
+    def write(self, post_type, post_id, date, notes, tags, data_1, data_2):
+        """Each post type will have 2 additional values for the db.
+
+        data_1 & data_2
+        ---------------
         photo: img, caption
         photoset: photoset, caption
         video: video_url, caption
@@ -271,18 +284,16 @@ class Database:
         audio: url, caption
         chat: title, body
 
-        These 2 values are args[0] and args[1] in the db entry
-
         """
         print(f'{post_type} - #{post_id}')
         self.cur.execute(f'INSERT INTO {post_type} VALUES(?, ?, ?, ?, ?, ?)',
-                         (post_id, date, notes, tags, args[0], args[1]))
+                         (post_id, date, notes, tags, data_1, data_2))
 
     def commit(self):
         """Commmit everything and close out the DB
 
-        We *could* commit after every write, in self.write() above, but that's
-        really slow.
+        We *could* commit after every write, in self.write() above,
+        but that's really slow.
 
         """
         self.conn.commit()
