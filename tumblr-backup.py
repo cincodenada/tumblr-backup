@@ -2,6 +2,7 @@ import argparse
 import os, sys
 import sqlite3
 from time import sleep
+import json
 
 import requests
 
@@ -12,6 +13,38 @@ CONFIG = '../config.txt'
 RATE_LIMIT = 3  # seconds
 
 
+class json_getter():
+    def __init__(self, blog, api_key, rate_limit = 3):
+        self.url = (f'https://api.tumblr.com/v2/blog/{blog}.tumblr.com/posts/'
+           f'?api_key={api_key}')
+
+    def get(self, offset):
+        """GET JSON from Tumblr
+
+        :param url: Tumblr API url with appropriate offset param
+        :returns: JSON response (dict)
+
+        """
+        cachefile = os.path.join('cache',str(offset) + '.json')
+        try:
+            return json.load(open(cachefile, 'r'))
+        except FileNotFoundError:
+            json_dict = self._get(offset)
+            json.dump(json_dict, open(cachefile, 'w'))
+            return json_dict
+
+    def _get(self, offset):
+        print("Loading from remote...")
+        url = f'{self.url}&offset={offset}'
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 404:
+            raise SystemExit('\n[!] Blog is 404\n')
+
+        try:
+            return resp.json()['response']
+        except (KeyError, ValueError):
+            raise SystemExit('\n[!] Error getting JSON\n')
+
 def main():
     """Main logic method"""
     args = parse_args()
@@ -19,20 +52,25 @@ def main():
     offset = args.offset
 
     api_key = parse_api_key()
-    url = (f'https://api.tumblr.com/v2/blog/{blog}.tumblr.com/posts/'
-           f'?api_key={api_key}')
+    mkdir('output')
+    mkdir('cache')
 
-    mkdir_output()
-    db = Database(blog)
+    db = Database(os.path.join('output',blog))
+    getter = json_getter(blog, api_key)
 
     while True:
-        js = get_json(f'{url}&offset={offset}')
-        if not remaining_json(js, db):
-            return print('\nFinished\n')
-        else:
-            offset += 20
-            print(f'\noffset {offset}\n')
-            sleep(RATE_LIMIT)
+        try:
+            js = getter.get(offset)
+            if not remaining_json(js, db):
+                return print('\nFinished\n')
+            else:
+                offset += 20
+                print(f'\noffset {offset}\n')
+                sleep(RATE_LIMIT)
+        except Exception as e:
+            print("Problem json:")
+            print(js)
+            raise e
 
         sys.stdout.flush()
 
@@ -69,23 +107,6 @@ def parse_api_key():
             return api_key
     except FileNotFoundError:
         raise SystemExit(f'\n[!] CONFIG file "{CONFIG}" missing\n')
-
-
-def get_json(url):
-    """GET JSON from Tumblr
-
-    :param url: Tumblr API url with appropriate offset param
-    :returns: JSON response (dict)
-
-    """
-    resp = requests.get(url, timeout=10)
-    if resp.status_code == 404:
-        raise SystemExit('\n[!] Blog is 404\n')
-
-    try:
-        return resp.json()['response']
-    except (KeyError, ValueError):
-        raise SystemExit('\n[!] Error getting JSON\n')
 
 
 def remaining_json(js, db):
@@ -172,16 +193,15 @@ def remaining_json(js, db):
         db.commit()
 
 
-def mkdir_output():
+def mkdir(dir):
     """Make local output folder"""
     try:
-        os.mkdir('output')
-        print(f'\n[+] Creating output folder')
+        os.mkdir(dir)
+        print(f'\n[+] Creating {dir} folder')
     except FileExistsError:
         pass
     except PermissionError:
-        raise SystemExit(f'\n[!] Can\'t create directory "output"\n')
-    os.chdir('output')
+        raise SystemExit(f'\n[!] Can\'t create directory "{dir}"\n')
 
 
 class Database:
