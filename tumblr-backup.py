@@ -133,72 +133,75 @@ def remaining_json(js, db):
     post_count = len(js['posts'])
 
     for post in range(post_count):
-        post_type = js['posts'][post]['type']
-        post_id = js['posts'][post]['id']
-        date = js['posts'][post]['date']
-        notes = js['posts'][post]['note_count']
-        tags = ','.join(js['posts'][post]['tags'])
+        post_data = js['posts'][post]
+
+        post_type = post_data['type']
+        post_id = post_data['id']
+        date = post_data['date']
+        notes = post_data['note_count']
+        tags = ','.join(post_data['tags'])
+        is_reblog = ('trail' in post_data)
 
         try:
             if 'photo' in post_type:
-                data_2 = js['posts'][post]['caption']
-                photo_count = len(js['posts'][post]['photos'])
+                data_2 = post_data['caption']
+                photo_count = len(post_data['photos'])
 
                 if photo_count > 1:  # photoset
                     photos = []
                     for photo in range(photo_count):
-                        img = js['posts'][post]['photos'][photo]['original_size']['url']
+                        img = post_data['photos'][photo]['original_size']['url']
                         photos.append(img)
                     data_1 = ','.join(photos)  # convert to string for db
                     post_type = 'photoset'  # manual correction
                 else:  # photo
-                    data_1 = js['posts'][post]['photos'][0]['original_size']['url']
+                    data_1 = post_data['photos'][0]['original_size']['url']
 
             elif 'video' in post_type:
-                data_2 = js['posts'][post]['caption']
-                video_type = js['posts'][post]['video_type']
+                data_2 = post_data['caption']
+                video_type = post_data['video_type']
 
                 if 'instagram' in video_type:
-                    data_1 = js['posts'][post]['permalink_url']
+                    data_1 = post_data['permalink_url']
                 elif 'tumblr' in video_type:
-                    data_1 = js['posts'][post]['video_url']
+                    data_1 = post_data['video_url']
                 elif 'youtube' in video_type:
-                    video_id = js['posts'][post]['video']['youtube']['video_id']
+                    video_id = post_data['video']['youtube']['video_id']
                     data_1 = f'https://www.youtube.com/watch?v={video_id}'
                 else:
                     data_1 = None
 
             elif 'answer' in post_type:
-                data_1 = js['posts'][post]['question']
-                data_2 = js['posts'][post]['answer']
+                data_1 = post_data['question']
+                data_2 = post_data['answer']
 
             elif 'text' in post_type:
-                data_1 = js['posts'][post]['title']
-                data_2 = js['posts'][post]['body']
+                data_1 = post_data['title']
+                data_2 = post_data['body']
 
             elif 'quote' in post_type:
-                data_1 = js['posts'][post]['text']
-                data_2 = js['posts'][post]['source']
+                data_1 = post_data['text']
+                data_2 = post_data['source']
 
             elif 'link' in post_type:
-                data_1 = js['posts'][post]['title']
-                data_2 = js['posts'][post]['url']
+                data_1 = post_data['title']
+                data_2 = post_data['url']
 
             elif 'audio' in post_type:
-                data_1 = js['posts'][post]['source_url']
-                data_2 = js['posts'][post]['caption']
+                data_1 = post_data['source_url']
+                data_2 = post_data['caption']
 
             elif 'chat' in post_type:
-                data_1 = js['posts'][post]['title']
-                data_2 = js['posts'][post]['body']
+                data_1 = post_data['title']
+                data_2 = post_data['body']
 
         except KeyError:
             print("Couldn't find details for {} post!".format(post_type))
-            print(js['posts'][post])
+            print(post_data)
             data_1 = None
             data_2 = None
 
-        db.write(post_type, post_id, date, notes, tags, data_1, data_2)
+        db.write(post_type, post_id, date, notes, tags, is_reblog, data_1, data_2)
 
     if post_count or post_count >= 20:
         return True
@@ -252,6 +255,7 @@ class Database:
                                                date TEXT,
                                                notes INT,
                                                tags TEXT,
+                                               is_reblog INT,
                                                img TEXT,
                                                caption TEXT)""")
 
@@ -259,6 +263,7 @@ class Database:
                                                   date TEXT,
                                                   notes INT,
                                                   tags TEXT,
+                                                  is_reblog INT,
                                                   photoset TEXT,
                                                   caption TEXT)""")
 
@@ -266,6 +271,7 @@ class Database:
                                               date TEXT,
                                               notes INT,
                                               tags TEXT,
+                                              is_reblog INT,
                                               title TEXT,
                                               body TEXT)""")
 
@@ -273,6 +279,7 @@ class Database:
                                                 date TEXT,
                                                 notes INT,
                                                 tags TEXT,
+                                                is_reblog INT,
                                                 question TEXT,
                                                 answer TEXT)""")
 
@@ -280,6 +287,7 @@ class Database:
                                                date TEXT,
                                                notes INT,
                                                tags TEXT,
+                                               is_reblog INT,
                                                video_url TEXT,
                                                caption TEXT)""")
 
@@ -287,6 +295,7 @@ class Database:
                                                date TEXT,
                                                notes INT,
                                                tags TEXT,
+                                               is_reblog INT,
                                                quote TEXT,
                                                source TEXT)""")
 
@@ -294,6 +303,7 @@ class Database:
                                               date TEXT,
                                               notes INT,
                                               tags TEXT,
+                                              is_reblog INT,
                                               title TEXT,
                                               url TEXT)""")
 
@@ -301,6 +311,7 @@ class Database:
                                                date TEXT,
                                                notes INT,
                                                tags TEXT,
+                                               is_reblog INT,
                                                url TEXT,
                                                caption TEXT)""")
 
@@ -308,10 +319,22 @@ class Database:
                                               date TEXT,
                                               notes INT,
                                               tags TEXT,
+                                              is_reblog INT,
                                               title TEXT,
                                               body TEXT)""")
 
-    def write(self, post_type, post_id, date, notes, tags, data_1, data_2):
+        self.cur.execute("""CREATE VIEW all_posts(type, post_id, date, notes, tags, is_reblog, data1, data2) AS
+                                SELECT 'photo', * FROM photo UNION ALL
+                                SELECT 'photoset', * FROM photoset UNION ALL
+                                SELECT 'text', * FROM text UNION ALL
+                                SELECT 'answer', * FROM answer UNION ALL
+                                SELECT 'video', * FROM video UNION ALL
+                                SELECT 'quote', * FROM quote UNION ALL
+                                SELECT 'link', * FROM link UNION ALL
+                                SELECT 'audio', * FROM audio UNION ALL
+                                SELECT 'chat', * FROM chat;""")
+
+    def write(self, post_type, post_id, date, notes, tags, is_reblog, data_1, data_2):
         """Each post type will have 2 additional values for the db.
 
         data_1 & data_2
@@ -328,8 +351,8 @@ class Database:
 
         """
         print(f'{post_type} - #{post_id}')
-        self.cur.execute(f'INSERT INTO {post_type} VALUES(?, ?, ?, ?, ?, ?)',
-                         (post_id, date, notes, tags, data_1, data_2))
+        self.cur.execute(f'INSERT INTO {post_type} VALUES(?, ?, ?, ?, ?, ?, ?)',
+                         (post_id, date, notes, tags, is_reblog, data_1, data_2))
 
     def commit(self):
         """Commmit everything and close out the DB
