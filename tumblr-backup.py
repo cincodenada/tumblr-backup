@@ -2,6 +2,7 @@ import argparse
 import os, sys
 import sqlite3
 from time import sleep
+from datetime import datetime, timedelta
 import json
 
 import requests
@@ -17,6 +18,8 @@ class json_getter():
     def __init__(self, blog, api_key, rate_limit = 3):
         self.url = (f'https://api.tumblr.com/v2/blog/{blog}.tumblr.com/posts/'
            f'?api_key={api_key}')
+        self.last_request = datetime.now()
+        self.rate_limit = timedelta(seconds=rate_limit)
 
     def get(self, offset):
         """GET JSON from Tumblr
@@ -35,6 +38,8 @@ class json_getter():
 
     def _get(self, offset):
         print("Loading from remote...")
+        self.rate_wait()
+
         url = f'{self.url}&offset={offset}'
         resp = requests.get(url, timeout=10)
         if resp.status_code == 404:
@@ -44,6 +49,15 @@ class json_getter():
             return resp.json()['response']
         except (KeyError, ValueError):
             raise SystemExit('\n[!] Error getting JSON\n')
+
+    def rate_wait(self):
+        wait_until = self.last_request + self.rate_limit
+        sleep_time = wait_until - datetime.now()
+        if(sleep_time.total_seconds() > 0):
+            sleep(sleep_time.total_seconds())
+
+        self.last_request = datetime.now()
+
 
 def main():
     """Main logic method"""
@@ -56,7 +70,7 @@ def main():
     mkdir('cache')
 
     db = Database(os.path.join('output',blog))
-    getter = json_getter(blog, api_key)
+    getter = json_getter(blog, api_key, RATE_LIMIT)
 
     while True:
         try:
@@ -66,7 +80,6 @@ def main():
             else:
                 offset += 20
                 print(f'\noffset {offset}\n')
-                sleep(RATE_LIMIT)
         except Exception as e:
             print("Problem json:")
             print(js)
