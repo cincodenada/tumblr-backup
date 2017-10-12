@@ -105,57 +105,64 @@ def remaining_json(js, db):
         notes = js['posts'][post]['note_count']
         tags = ','.join(js['posts'][post]['tags'])
 
-        if 'photo' in post_type:
-            data_2 = js['posts'][post]['caption']
-            photo_count = len(js['posts'][post]['photos'])
+        try:
+            if 'photo' in post_type:
+                data_2 = js['posts'][post]['caption']
+                photo_count = len(js['posts'][post]['photos'])
 
-            if photo_count > 1:  # photoset
-                photos = []
-                for photo in range(photo_count):
-                    img = js['posts'][post]['photos'][photo]['original_size']['url']
-                    photos.append(img)
-                data_1 = ','.join(photos)  # convert to string for db
-                post_type = 'photoset'  # manual correction
-            else:  # photo
-                data_1 = js['posts'][post]['photos'][0]['original_size']['url']
+                if photo_count > 1:  # photoset
+                    photos = []
+                    for photo in range(photo_count):
+                        img = js['posts'][post]['photos'][photo]['original_size']['url']
+                        photos.append(img)
+                    data_1 = ','.join(photos)  # convert to string for db
+                    post_type = 'photoset'  # manual correction
+                else:  # photo
+                    data_1 = js['posts'][post]['photos'][0]['original_size']['url']
 
-        elif 'video' in post_type:
-            data_2 = js['posts'][post]['caption']
-            video_type = js['posts'][post]['video_type']
+            elif 'video' in post_type:
+                data_2 = js['posts'][post]['caption']
+                video_type = js['posts'][post]['video_type']
 
-            if 'instagram' in video_type:
-                data_1 = js['posts'][post]['permalink_url']
-            elif 'tumblr' in video_type:
-                data_1 = js['posts'][post]['video_url']
-            elif 'youtube' in video_type:
-                video_id = js['posts'][post]['video']['youtube']['video_id']
-                data_1 = f'https://www.youtube.com/watch?v={video_id}'
-            else:
-                data_1 = None
+                if 'instagram' in video_type:
+                    data_1 = js['posts'][post]['permalink_url']
+                elif 'tumblr' in video_type:
+                    data_1 = js['posts'][post]['video_url']
+                elif 'youtube' in video_type:
+                    video_id = js['posts'][post]['video']['youtube']['video_id']
+                    data_1 = f'https://www.youtube.com/watch?v={video_id}'
+                else:
+                    data_1 = None
 
-        elif 'answer' in post_type:
-            data_1 = js['posts'][post]['question']
-            data_2 = js['posts'][post]['answer']
+            elif 'answer' in post_type:
+                data_1 = js['posts'][post]['question']
+                data_2 = js['posts'][post]['answer']
 
-        elif 'text' in post_type:
-            data_1 = js['posts'][post]['title']
-            data_2 = js['posts'][post]['body']
+            elif 'text' in post_type:
+                data_1 = js['posts'][post]['title']
+                data_2 = js['posts'][post]['body']
 
-        elif 'quote' in post_type:
-            data_1 = js['posts'][post]['text']
-            data_2 = js['posts'][post]['source']
+            elif 'quote' in post_type:
+                data_1 = js['posts'][post]['text']
+                data_2 = js['posts'][post]['source']
 
-        elif 'link' in post_type:
-            data_1 = js['posts'][post]['title']
-            data_2 = js['posts'][post]['url']
+            elif 'link' in post_type:
+                data_1 = js['posts'][post]['title']
+                data_2 = js['posts'][post]['url']
 
-        elif 'audio' in post_type:
-            data_1 = js['posts'][post]['source_url']
-            data_2 = js['posts'][post]['caption']
+            elif 'audio' in post_type:
+                data_1 = js['posts'][post]['source_url']
+                data_2 = js['posts'][post]['caption']
 
-        elif 'chat' in post_type:
-            data_1 = js['posts'][post]['title']
-            data_2 = js['posts'][post]['body']
+            elif 'chat' in post_type:
+                data_1 = js['posts'][post]['title']
+                data_2 = js['posts'][post]['body']
+
+        except KeyError:
+            print("Couldn't find details for {} post!".format(post_type))
+            print(js['posts'][post])
+            data_1 = None
+            data_2 = None
 
         db.write(post_type, post_id, date, notes, tags, data_1, data_2)
 
