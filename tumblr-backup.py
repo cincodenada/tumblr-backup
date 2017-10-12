@@ -4,6 +4,7 @@ import sqlite3
 from time import sleep
 from datetime import datetime, timedelta
 import json
+import csv
 
 import requests
 
@@ -222,13 +223,13 @@ def mkdir(dir):
 
 class Database:
 
-    def __init__(self, blog):
+    def __init__(self, path):
         """Initialize local database while checking for an existing one
 
         :param blog: Tumblr blog name
 
         """
-        db = f'{blog}.db'
+        db = f'{path}.db'
         self.check_backup(db)
 
         try:
@@ -239,6 +240,9 @@ class Database:
 
         self.cur = self.conn.cursor()
         self.create_tables()
+
+        self.csv = csv.writer(open(f'{path}.csv', 'w'))
+        self.csv.writerow(['post_type', 'post_id', 'date', 'notes', 'tags', 'is_reblog', 'data_1', 'data_2'])
 
     def check_backup(self, db):
         """Create backup of DB if DB already exists"""
@@ -353,6 +357,8 @@ class Database:
         print(f'{post_type} - #{post_id}')
         self.cur.execute(f'INSERT INTO {post_type} VALUES(?, ?, ?, ?, ?, ?, ?)',
                          (post_id, date, notes, tags, is_reblog, data_1, data_2))
+
+        self.csv.writerow([post_type, post_id, date, notes, tags, is_reblog, data_1, data_2])
 
     def commit(self):
         """Commmit everything and close out the DB
