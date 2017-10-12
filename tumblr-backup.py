@@ -1,5 +1,5 @@
 import argparse
-import os
+import os, sys
 import sqlite3
 from time import sleep
 
@@ -33,6 +33,8 @@ def main():
             offset += 20
             print(f'\noffset {offset}\n')
             sleep(RATE_LIMIT)
+
+        sys.stdout.flush()
 
 
 def parse_args():
